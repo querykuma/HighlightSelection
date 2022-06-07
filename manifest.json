@@ -1,0 +1,20 @@
+{
+  "description": "選択範囲のキーワードをハイライト",
+  "manifest_version": 3,
+  "name": "Highlight Selection",
+  "version": "1.0",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "48": "icon48.png"
+  },
+  "permissions": [
+    "contextMenus",
+    "tabs",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ]
+}

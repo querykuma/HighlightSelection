@@ -1,2 +1,33 @@
-# HighlightSelection
-Bookmarklet or chrome extension that highlights web pages with the selection as keywords
+# Highlight Selection
+
+HTMLタグを超えて、選択範囲をキーワードとして、ウェブページをハイライトするブックマークレット及び拡張機能です。
+
+## 機能
+
+- 選択範囲をキーワードとして、複数の出現箇所をハイライトします。その際、HTMLタグを超えて選択範囲を選択できます。
+- マウスホバーで×アイコンが出てハイライトを削除できます。
+- 30種類以上のハイライトを順番に使用できます。
+
+## ブックマークレット版と拡張機能版の違い
+
+ブックマークレット版は、拡張機能が動作しないChromeウェブストア上でも動作します。
+
+拡張機能版は、選択範囲がフレーム内であっても動作します。拡張機能版は、選択範囲の右クリックメニューに選択項目を追加します。
+
+## インストール方法
+
+ブックマークレット版は、ブックマークのURL欄に[JavaScript](https://raw.githubusercontent.com/querykuma/HighlightSelection/main/highlight_selection_bookmark.js)を貼り付けてください。
+
+拡張機能版は、「その他のツール」から「拡張機能」を開き(chrome://extensions/)、デベロッパーモードにして、「パッケージ化されていない拡張機能を読み込む」を押下して、フォルダーを選択してください。
+
+## 使い方
+
+ブックマークレット版は、選択範囲を選択して、ブックマークレットを開くことで起動します。
+
+拡張機能版は、選択範囲を右クリックしてから、ショートカットキーHで選択項目が選択されて、起動します。
+
+## 動作環境
+
+- Google Chrome
+
+
