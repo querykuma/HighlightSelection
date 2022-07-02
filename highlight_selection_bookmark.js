@@ -98,10 +98,17 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 	})();
 
 	/**
-	 * 引数の文字列から空白文字を除いて返す。
+	 * 全角から半角へ変換する。
 	 * @param {string} s_text
 	 */
-	const remove_white_spaces = (s_text) => s_text.replaceAll(/\s+/gu, '');
+	const zenkaku2hankaku = (s_text) => s_text.replace(/[Ａ-Ｚａ-ｚ０-９]/gu, (a) => String.fromCharCode(a.charCodeAt(0) - 0xFEE0));
+
+	/**
+	 * 引数の文字列から空白文字を除いて、全角を半角にして返す。
+	 * @param {string} s_text
+	 * @returns {string}
+	 */
+	const remove_white_spaces_hankaku = (s_text) => zenkaku2hankaku(s_text.replaceAll(/\s+/gu, ''));
 
 	/**
 	 * textContentに空白文字(\s)が存在することを考慮した位置を返す。
@@ -148,28 +155,36 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 		document.head.insertAdjacentHTML('beforeend', `
 <style id="highlight_selection_style">
 .highlight_selection {
-    position: relative;
-    padding: 2px 0;
+	position: relative;
+	padding: 2px 0;
 	font-style: normal;
 	line-height: 1.3;
 }
 
 .highlight_selection_close {
-    position: absolute;
-    left: -5px;
-    top: -5px;
-    background-color: white;
-    color: black;
-    border: 1px solid;
-    padding: 0 2px;
-    font-size: 8px;
+	position: absolute;
+	left: -5px;
+	top: -5px;
+	background-color: white;
+	color: black;
+	border: 1px solid;
 	user-select: none;
+	line-height: 0;
+	max-width: unset;
+	text-indent: 0;
 }
 
 .highlight_selection_close:hover {
-    color: white;
-    background-color: hotpink;
-    cursor: pointer;
+	color: white;
+	background-color: hotpink;
+	cursor: pointer;
+}
+
+.highlight_selection_close_svg {
+	width: 10px;
+	height: 10px;
+	fill: currentColor;
+	max-width: unset;
 }
 
 .highlight_selection_0 {
@@ -273,8 +288,8 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 }
 
 .highlight_selection_20 {
-	color: #000091 !important;
-	background-color: #f3dfe9 !important;
+	color: #4c02f9 !important;
+	background-color: #8ffca0 !important;
 }
 
 .highlight_selection_21 {
@@ -293,7 +308,7 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 }
 
 .highlight_selection_24 {
-	color: #3bad81 !important;
+	color: #03ac6b !important;
 	background-color: #f7f5e1 !important;
 }
 
@@ -303,7 +318,7 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 }
 
 .highlight_selection_26 {
-	color: #0047a2 !important;
+	color: #3789f1 !important;
 	background-color: #f7f701 !important;
 }
 
@@ -318,20 +333,44 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 }
 
 .highlight_selection_29 {
-	color: #161f5f !important;
+	color: #007a65 !important;
 	background-color: #f7bf61 !important;
 }
 
 .highlight_selection_30 {
-	color: #0b3250 !important;
-	background-color: #d0f5f7 !important;
+	color: #ed0597 !important;
+	background-color: #d0f5f7
 }
 
 .highlight_selection_31 {
-	color: #2d6358 !important;
-	background-color: #f7c8ca !important;
+	color: #2884b3 !important;
+	background-color: #f7c8ca
+}
+
+.highlight_selection_32 {
+	color: #000091 !important;
+	background-color: #f3dfe9 !important;
 }
 </style>`);
+	};
+
+	/**
+	 * 再利用するためにsvgを追加する
+	 */
+	const add_svg_template = () => {
+		const e_svg_template = document.querySelector('#highlight_selection_svg_template');
+		if (e_svg_template) {
+			return;
+		}
+
+		document.body.insertAdjacentHTML('afterbegin',
+			`<svg xmlns="http://www.w3.org/2000/svg" style="display:none;" id="highlight_selection_svg_template">
+<symbol viewBox="0 0 512 512" id="highlight_selection_close_xlink">
+<g>
+ <polygon points="511.998,70.682 441.315,0 256.002,185.313 70.685,0 0.002,70.692 185.316,256.006 0.002,441.318 70.69,512 256.002,326.688 441.315,512 511.998,441.318 326.684,256.006"></polygon>
+</g>
+</symbol>
+</svg>`);
 	};
 
 	/**
@@ -409,7 +448,7 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 	const get_visible_text = (r_selection) => {
 		const s_texts = [];
 		get_visible_text_dfs(r_selection.commonAncestorContainer, s_texts, r_selection);
-		return remove_white_spaces(s_texts.join(''));
+		return remove_white_spaces_hankaku(s_texts.join(''));
 	};
 
 	/**
@@ -426,9 +465,7 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 		}
 
 		const r_selection = selection.getRangeAt(0);
-		let s_selection = get_visible_text(r_selection);
-
-		s_selection = remove_white_spaces(s_selection);
+		const s_selection = get_visible_text(r_selection);
 
 		if (s_selection === "") {
 			if (g_debug) {
@@ -466,7 +503,7 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 					return;
 				}
 
-				const s_text = remove_white_spaces(e_arg.textContent);
+				const s_text = remove_white_spaces_hankaku(e_arg.textContent);
 
 				if (s_text === '') {
 					return;
@@ -651,12 +688,15 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 	/**
 	 * テキストをハイライトした要素を返す。
 	 * @param {string} text
-	 * @param {number} n_highlight_selection_color
+	 * @param {number} n_highlight_selection_serial_color
+	 * @param {number} n_max_highlight_selection_color
 	 * @returns {element}
 	 */
-	const get_marked_node = (text, n_highlight_selection_color) => {
+	const get_marked_node = (text, n_highlight_selection_serial_color, n_max_highlight_selection_color) => {
+		const n_highlight_selection_color = n_highlight_selection_serial_color % n_max_highlight_selection_color;
+
 		const e_mark = document.createElement("mark");
-		e_mark.classList.add(`highlight_selection`, `highlight_selection_${n_highlight_selection_color}`);
+		e_mark.classList.add(`highlight_selection`, `highlight_selection_${n_highlight_selection_color}`, `highlight_selection_serial_${n_highlight_selection_serial_color}`);
 		e_mark.textContent = text;
 
 		return e_mark;
@@ -665,10 +705,11 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 	/**
 	 * テキストノードのテキストをハイライト後に得られる置換ノードの配列を返す。
 	 * @param {object} o_custom_range_value
-	 * @param {number} n_highlight_selection_color
+	 * @param {number} n_highlight_selection_serial_color
+	 * @param {number} n_max_highlight_selection_color
 	 * @returns {null|(element|string)[]}
 	 */
-	const get_marked_nodes = (o_custom_range_value, n_highlight_selection_color) => {
+	const get_marked_nodes = (o_custom_range_value, n_highlight_selection_serial_color, n_max_highlight_selection_color) => {
 		const a_results = [];
 
 		const node = o_custom_range_value.node;
@@ -693,7 +734,7 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 			const pos_end = get_adjusted_position(sorted_custom_range.end, textContent);
 			s_focus = textContent.substring(get_adjusted_position(sorted_custom_range.start, textContent, { "f_include_end_spaces": true }), pos_end);
 
-			a_results.push(get_marked_node(s_focus, n_highlight_selection_color));
+			a_results.push(get_marked_node(s_focus, n_highlight_selection_serial_color, n_max_highlight_selection_color));
 
 			n_cursor = pos_end;
 		}
@@ -714,31 +755,42 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 		recover_console_log();
 
 		add_style_sheet();
+		add_svg_template();
 	};
 
 	/**
 	 * 終了前処理
-	 * @param {number} n_highlight_selection_color
+	 * @param {number} n_highlight_selection_serial_color
 	 */
-	const finalize = (n_highlight_selection_color) => {
-		document.documentElement.dataset.n_highlight_selection_color = n_highlight_selection_color;
+	const finalize = (n_highlight_selection_serial_color) => {
+		document.documentElement.dataset.n_highlight_selection_serial_color = n_highlight_selection_serial_color;
 
 		getSelection().empty();
 	};
 
 	/**
-	 * ハイライト色の番号を返す。
+	 * ハイライト色の連続番号を返す。
+	 * 最大の色番号を超えたとき色番号を0に戻さないのは、最大の色番号を超えたときに作られた色番号のハイライトを削除したとき、超えた色番号のハイライトのみを削除し、0の色番号のハイライトを削除しないため。
+	 * 「highlight_selection_番号」と「highlight_selection_serial_連続番号」の2つのクラスをハイライト対象の要素に付与する。
 	 * @returns {number}
 	 */
-	const get_highlight_color = () => {
-		const e_style = document.querySelector('#highlight_selection_style');
+	const get_highlight_selection_serial_color = () => {
+		const n_highlight_selection_serial_color = document.documentElement.dataset.n_highlight_selection_serial_color;
 
-		const n_highlight_selection_colors = e_style.textContent.match(/highlight_selection_\d+/gu).length;
-
-		if (document.documentElement.dataset.n_highlight_selection_color) {
-			return (Number(document.documentElement.dataset.n_highlight_selection_color) + 1) % n_highlight_selection_colors;
+		if (n_highlight_selection_serial_color) {
+			return Number(n_highlight_selection_serial_color) + 1;
 		}
 		return 0;
+	};
+
+	/**
+	 * ハイライト色の最大番号を返す。
+	 * @returns {number}
+	 */
+	const get_max_highlight_selection_color = () => {
+		const e_style = document.querySelector('#highlight_selection_style');
+
+		return e_style.textContent.match(/highlight_selection_\d+/gu).length;
 	};
 
 	/**
@@ -747,10 +799,10 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 	 * @returns
 	 */
 	const remove_highlight_selections = (e_highlight_selection_target) => {
-		const m = e_highlight_selection_target.className.match(/\bhighlight_selection_(\d+)\b/u);
+		const m = e_highlight_selection_target.className.match(/\bhighlight_selection_serial_(\d+)\b/u);
 		const s_highlight_selection = m[1];
 
-		const e_items = document.querySelectorAll(`.highlight_selection_${s_highlight_selection}`);
+		const e_items = document.querySelectorAll(`.highlight_selection_serial_${s_highlight_selection}`);
 
 		for (let index = 0; index < e_items.length; index++) {
 			const e_item = e_items[index];
@@ -767,10 +819,10 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 			let prev_text_node = null;
 			const child_nodes = [...e_item.parentElement.childNodes];
 
-			for (let index = 0; index < child_nodes.length; index++) {
-				const child_node = child_nodes[index];
+			for (let child_nodes_index = 0; child_nodes_index < child_nodes.length; child_nodes_index++) {
+				const child_node = child_nodes[child_nodes_index];
 
-				if (child_node.classList?.contains(`highlight_selection_${s_highlight_selection}`)) {
+				if (child_node.classList?.contains(`highlight_selection_serial_${s_highlight_selection}`)) {
 					if (child_node.childNodes.length === 1 && child_node.firstChild.nodeType === Node.TEXT_NODE) {
 						if (prev_text_node) {
 							prev_text_node.textContent += child_node.textContent;
@@ -842,31 +894,36 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 
 				document.querySelectorAll('.highlight_selection_close').forEach((a) => a.remove());
 
-				e_target.insertAdjacentHTML('beforeend', '<span class="highlight_selection_close">x</span>');
-				const e_close = e_target.lastElementChild;
+				e_target.insertAdjacentHTML('beforeend', '<span class="highlight_selection_close"><svg class="highlight_selection_close_svg"><use xlink:href="#highlight_selection_close_xlink"/></svg></span>');
+				const e_close = e_target.querySelector(".highlight_selection_close");
 
 				/**
 				 * 閉じるボタンをclickしたらハイライトを削除する。
 				 * @param {MouseEvent} e
 				 */
 				const c_mousedown = (e) => {
+					if (e.button !== 0) {
+						/**
+						 * 左ボタンでなければイベント関数を終了する。
+						 */
+						return;
+					}
+
 					e.stopPropagation();
 					e.stopImmediatePropagation();
 
-					const e_target = e.target;
-					const e_highlight_selection_target = e_target.parentElement;
+					const e_highlight_selection = e_close.closest('.highlight_selection');
 
 					/**
-					 * e_targetを削除することでclickイベントが発生しない。
+					 * e_closeを削除することでclickイベントが発生しない。
 					 */
-					e_target.remove();
+					e_close.remove();
 
-					remove_highlight_selections(e_highlight_selection_target);
+					remove_highlight_selections(e_highlight_selection);
 				};
 
 				e_close.addEventListener('mousedown', c_mousedown, {
-					"capture": true,
-					"once": true
+					"capture": true
 				});
 
 				/**
@@ -878,8 +935,7 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 					e_target.removeEventListener('mouseleave', c_mouseleave);
 
 					e_close.removeEventListener('mousedown', c_mousedown, {
-						"capture": true,
-						"once": true
+						"capture": true
 					});
 					e_close.remove();
 				};
@@ -896,7 +952,11 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 			}
 		};
 
-		if (!Object.prototype.hasOwnProperty.call(document.documentElement.dataset, 'n_highlight_selection_color')) {
+		/**
+		 * 初回だけ起動させ、常駐イベントリスナーになる。
+		 * n_highlight_selection_serial_colorの値は終了前処理（finalize）で設定する。
+		 */
+		if (!document.documentElement.dataset.n_highlight_selection_serial_color) {
 			document.addEventListener('mouseover', c_mouseover, {
 				"capture": true
 			});
@@ -922,8 +982,6 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 		if (!s_selection) {
 			return;
 		}
-
-		const n_highlight_selection_color = get_highlight_color();
 
 		const o_texts = [];
 
@@ -959,11 +1017,14 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 			console.log('custom_ranges_by_node = ', o_custom_ranges_by_node);
 		}
 
+		const n_highlight_selection_serial_color = get_highlight_selection_serial_color();
+		const n_max_highlight_selection_color = get_max_highlight_selection_color();
+
 		const o_custom_range_values = Object.values(o_custom_ranges_by_node);
 		for (let index = 0; index < o_custom_range_values.length; index++) {
 			const o_custom_range_value = o_custom_range_values[index];
 
-			const N_marked_items = get_marked_nodes(o_custom_range_value, n_highlight_selection_color);
+			const N_marked_items = get_marked_nodes(o_custom_range_value, n_highlight_selection_serial_color, n_max_highlight_selection_color);
 			if (N_marked_items) {
 				replace_node_with(o_custom_range_value.node, N_marked_items);
 			}
@@ -971,15 +1032,15 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 
 		add_close_button_event();
 
-		finalize(n_highlight_selection_color);
-
-		/**
-		 * 元のテキストノードが全部置換されて削除されたことを確認する。
-		 * これにより元のテキストノードに保存したget_node_keyのユニークキーが全部消え、ユニークキーの前回の状態を気にしなくていいことが分かる。
-		 */
-		o_custom_range_values.forEach((a) => console.assert(a.node.isConnected === false));
+		finalize(n_highlight_selection_serial_color);
 
 		if (g_debug) {
+			/**
+			 * 元のテキストノードが全部置換されて削除されたことを確認する。
+			 * これにより元のテキストノードに保存したget_node_keyのユニークキーが全部消え、ユニークキーの前回の状態を気にしなくていいことが分かる。
+			 */
+			o_custom_range_values.forEach((a) => console.assert(a.node.isConnected === false));
+
 			console.log('done');
 		}
 	};
