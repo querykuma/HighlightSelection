@@ -2,7 +2,7 @@
   "description": "選択範囲のキーワードをハイライト",
   "manifest_version": 3,
   "name": "Highlight Selection",
-  "version": "1.0",
+  "version": "1.2",
   "background": {
     "service_worker": "background.js"
   },

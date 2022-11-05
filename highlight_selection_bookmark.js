@@ -104,11 +104,36 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 	const zenkaku2hankaku = (s_text) => s_text.replace(/[Ａ-Ｚａ-ｚ０-９]/gu, (a) => String.fromCharCode(a.charCodeAt(0) - 0xFEE0));
 
 	/**
-	 * 引数の文字列から空白文字を除いて、全角を半角にして返す。
+	 * カタカナをひらがなへ変換する。
+	 * @param {string} s_text
+	 */
+	const katakana2hiragana = (s_text) => s_text.replace(/[ァ-ン]/gu, (a) => String.fromCharCode(a.charCodeAt(0) - 0x60));
+
+	const kanjinumber2number_table = {
+		'一': 1,
+		'二': 2,
+		'三': 3,
+		'四': 4,
+		'五': 5,
+		'六': 6,
+		'七': 7,
+		'八': 8,
+		'九': 9
+	};
+
+	/**
+	 * 漢数字を半角数値に変換する。
 	 * @param {string} s_text
 	 * @returns {string}
 	 */
-	const remove_white_spaces_hankaku = (s_text) => zenkaku2hankaku(s_text.replaceAll(/\s+/gu, ''));
+	const kanjinumber2number = (s_text) => s_text.replace(/[一二三四五六七八九]/gu, (a) => kanjinumber2number_table[a]);
+
+	/**
+	 * 引数の文字列から空白文字を除いて、全角を半角にして、カタカナをひらがなにして、漢数字を半角数値に変換する。
+	 * @param {string} s_text
+	 * @returns {string}
+	 */
+	const remove_white_spaces_hankaku = (s_text) => kanjinumber2number(katakana2hiragana(zenkaku2hankaku(s_text.replaceAll(/\s+/gu, ''))));
 
 	/**
 	 * textContentに空白文字(\s)が存在することを考慮した位置を返す。
@@ -159,6 +184,7 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 	padding: 2px 0;
 	font-style: normal;
 	line-height: 1.3;
+	background: initial;
 }
 
 .highlight_selection_close {
