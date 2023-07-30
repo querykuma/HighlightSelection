@@ -1,5 +1,519 @@
 javascript: (() => {/* eslint-disable-line no-unused-labels */
 	const g_debug = 0;
+	const g_message = "highlight_selection";
+
+	/**
+	 * MutationObserverから起動した回数。
+	 */
+	let g_count_mutation_start = 0;
+
+	/**
+	 * MutationObserverから起動する最大回数。
+	 */
+	const g_max_count_mutation_start = 10;
+
+
+
+	/**
+	 * Copyright (c) 2013 Blake Embrey (hello@blakeembrey.com)
+	 * Released under the MIT license
+	 * https://github.com/plurals/pluralize/blob/master/LICENSE
+	 * Pluralize v8.0.0
+	 */
+	const pluralize = (() => {
+		/* Rule storage - pluralize and singularize need to be run sequentially,
+		while other rules can be optimized using an object for instant lookups. */
+		const pluralRules = [];
+		const singularRules = [];
+		const uncountables = {};
+		const irregularPlurals = {};
+		const irregularSingles = {};
+
+		/**
+		 * Sanitize a pluralization rule to a usable regular expression.
+		 *
+		 * @param  {(RegExp|string)} rule
+		 * @return {RegExp}
+		 */
+		function sanitizeRule(rule) {
+			if (typeof rule === 'string') {
+				return new RegExp(`^${rule}$`, 'iu');
+			}
+
+			return rule;
+		}
+
+		/**
+		 * Pass in a word token to produce a function that can replicate the case on
+		 * another word.
+		 *
+		 * @param  {string}   word
+		 * @param  {string}   token
+		 * @return {Function}
+		 */
+		function restoreCase(word, token) {
+			/* Tokens are an exact match. */
+			if (word === token) { return token; }
+
+			/* Lower cased words. E.g. "hello". */
+			if (word === word.toLowerCase()) { return token.toLowerCase(); }
+
+			/* Upper cased words. E.g. "WHISKY". */
+			if (word === word.toUpperCase()) { return token.toUpperCase(); }
+
+			/* Title cased words. E.g. "Title". */
+			if (word[0] === word[0].toUpperCase()) {
+				return token.charAt(0).toUpperCase() + token.substr(1).toLowerCase();
+			}
+
+			/* Lower cased words. E.g. "test". */
+			return token.toLowerCase();
+		}
+
+		/**
+		 * Interpolate a regexp string.
+		 *
+		 * @param  {string} str
+		 * @param  {Array}  args
+		 * @return {string}
+		 */
+		function interpolate(str, args) {
+			return str.replace(/\$(\d{1,2})/gu, function (match, index) {
+				return args[index] || '';
+			});
+		}
+
+		/**
+		 * Replace a word using a rule.
+		 *
+		 * @param  {string} word
+		 * @param  {Array}  rule
+		 * @return {string}
+		 */
+		function replace(word, rule) {
+			return word.replace(rule[0], function (match, index) {
+				/* eslint-disable-next-line prefer-rest-params */
+				const result = interpolate(rule[1], arguments);
+
+				if (match === '') {
+					return restoreCase(word[index - 1], result);
+				}
+
+				return restoreCase(match, result);
+			});
+		}
+
+		/**
+		 * Sanitize a word by passing in the word and sanitization rules.
+		 *
+		 * @param  {string}   token
+		 * @param  {string}   word
+		 * @param  {Array}    rules
+		 * @return {string}
+		 */
+		function sanitizeWord(token, word, rules) {
+			/* Empty string or doesn't need fixing. */
+			if (!token.length || Object.prototype.hasOwnProperty.call(uncountables, token)) {
+				return word;
+			}
+
+			let len = rules.length;
+
+			/* Iterate over the sanitization rules and use the first one to match. */
+			while (len--) {
+				const rule = rules[len];
+
+				if (rule[0].test(word)) { return replace(word, rule); }
+			}
+
+			return word;
+		}
+
+		/**
+		 * Replace a word with the updated word.
+		 *
+		 * @param  {Object}   replaceMap
+		 * @param  {Object}   keepMap
+		 * @param  {Array}    rules
+		 * @return {Function}
+		 */
+		function replaceWord(replaceMap, keepMap, rules) {
+			return function (word) {
+				/* Get the correct token and case restoration functions. */
+				const token = word.toLowerCase();
+
+				/* Check against the keep object map. */
+				if (Object.prototype.hasOwnProperty.call(keepMap, token)) {
+					return restoreCase(word, token);
+				}
+
+				/* Check against the replacement map for a direct word replacement. */
+				if (Object.prototype.hasOwnProperty.call(replaceMap, token)) {
+					return restoreCase(word, replaceMap[token]);
+				}
+
+				/* Run all the rules against the word. */
+				return sanitizeWord(token, word, rules);
+			};
+		}
+
+		/**
+		 * Check if a word is part of the map.
+		 */
+		function checkWord(replaceMap, keepMap, rules) {
+			return function (word) {
+				const token = word.toLowerCase();
+
+				if (Object.prototype.hasOwnProperty.call(keepMap, token)) { return true; }
+				if (Object.prototype.hasOwnProperty.call(replaceMap, token)) { return false; }
+
+				return sanitizeWord(token, token, rules) === token;
+			};
+		}
+
+		/**
+		 * Pluralize or singularize a word based on the passed in count.
+		 *
+		 * @param  {string}  word      The word to pluralize
+		 * @param  {number}  count     How many of the word exist
+		 * @param  {boolean} inclusive Whether to prefix with the number (e.g. 3 ducks)
+		 * @return {string}
+		 */
+		function pluralize_in(word, count, inclusive) {
+			const pluralized = count === 1
+				? pluralize_in.singular(word)
+				: pluralize_in.plural(word);
+
+			return (inclusive ? `${count} ` : '') + pluralized;
+		}
+
+		/**
+		 * Pluralize a word.
+		 *
+		 * @type {Function}
+		 */
+		pluralize_in.plural = replaceWord(
+			irregularSingles, irregularPlurals, pluralRules
+		);
+
+		/**
+		 * Check if a word is plural.
+		 *
+		 * @type {Function}
+		 */
+		pluralize_in.isPlural = checkWord(
+			irregularSingles, irregularPlurals, pluralRules
+		);
+
+		/**
+		 * Singularize a word.
+		 *
+		 * @type {Function}
+		 */
+		pluralize_in.singular = replaceWord(
+			irregularPlurals, irregularSingles, singularRules
+		);
+
+		/**
+		 * Check if a word is singular.
+		 *
+		 * @type {Function}
+		 */
+		pluralize_in.isSingular = checkWord(
+			irregularPlurals, irregularSingles, singularRules
+		);
+
+		/**
+		 * Add a pluralization rule to the collection.
+		 *
+		 * @param {(string|RegExp)} rule
+		 * @param {string}          replacement
+		 */
+		pluralize_in.addPluralRule = function (rule, replacement) {
+			pluralRules.push([sanitizeRule(rule), replacement]);
+		};
+
+		/**
+		 * Add a singularization rule to the collection.
+		 *
+		 * @param {(string|RegExp)} rule
+		 * @param {string}          replacement
+		 */
+		pluralize_in.addSingularRule = function (rule, replacement) {
+			singularRules.push([sanitizeRule(rule), replacement]);
+		};
+
+		/**
+		 * Add an uncountable word rule.
+		 *
+		 * @param {(string|RegExp)} word
+		 */
+		pluralize_in.addUncountableRule = function (word) {
+			if (typeof word === 'string') {
+				uncountables[word.toLowerCase()] = true;
+				return;
+			}
+
+			/* Set singular and plural references for the word. */
+			pluralize_in.addPluralRule(word, '$0');
+			pluralize_in.addSingularRule(word, '$0');
+		};
+
+		/**
+		 * Add an irregular word definition.
+		 *
+		 * @param {string} single
+		 * @param {string} plural
+		 */
+		pluralize_in.addIrregularRule = function (single, plural) {
+			plural = plural.toLowerCase();
+			single = single.toLowerCase();
+
+			irregularSingles[single] = plural;
+			irregularPlurals[plural] = single;
+		};
+
+		/**
+		 * Irregular rules.
+		 */
+		[
+			/* Pronouns. */
+			/* ['I', 'we'],
+			['me', 'us'],
+			['he', 'they'],
+			['she', 'they'], */
+			['them', 'them'],
+			['myself', 'ourselves'],
+			['yourself', 'yourselves'],
+			['itself', 'themselves'],
+			['herself', 'themselves'],
+			['himself', 'themselves'],
+			['themself', 'themselves'],
+			['is', 'are'],
+			['was', 'were'],
+			['has', 'have'],
+			['this', 'these'],
+			['that', 'those'],
+			/* Words ending in with a consonant and `o`. */
+			['echo', 'echoes'],
+			['dingo', 'dingoes'],
+			['volcano', 'volcanoes'],
+			['tornado', 'tornadoes'],
+			['torpedo', 'torpedoes'],
+			/* Ends with `us`. */
+			['genus', 'genera'],
+			['viscus', 'viscera'],
+			/* Ends with `ma`. */
+			['stigma', 'stigmata'],
+			['stoma', 'stomata'],
+			['dogma', 'dogmata'],
+			['lemma', 'lemmata'],
+			['schema', 'schemata'],
+			['anathema', 'anathemata'],
+			/* Other irregular rules. */
+			['ox', 'oxen'],
+			['axe', 'axes'],
+			['die', 'dice'],
+			['yes', 'yeses'],
+			['foot', 'feet'],
+			['eave', 'eaves'],
+			['goose', 'geese'],
+			['tooth', 'teeth'],
+			['quiz', 'quizzes'],
+			['human', 'humans'],
+			['proof', 'proofs'],
+			['carve', 'carves'],
+			['valve', 'valves'],
+			['looey', 'looies'],
+			['thief', 'thieves'],
+			['groove', 'grooves'],
+			['pickaxe', 'pickaxes'],
+			['passerby', 'passersby']
+		].forEach(function (rule) {
+			return pluralize_in.addIrregularRule(rule[0], rule[1]);
+		});
+
+		/**
+		 * Pluralization rules.
+		 */
+		[
+			[/s?$/iu, 's'],
+			/* eslint-disable-next-line no-control-regex */
+			[/[^\u0000-\u007F]$/iu, '$0'],
+			[/([^aeiou]ese)$/iu, '$1'],
+			[/(ax|test)is$/iu, '$1es'],
+			[/(alias|[^aou]us|t[lm]as|gas|ris)$/iu, '$1es'],
+			[/(e[mn]u)s?$/iu, '$1s'],
+			[/([^l]ias|[aeiou]las|[ejzr]as|[iu]am)$/iu, '$1'],
+			[/(alumn|syllab|vir|radi|nucle|fung|cact|stimul|termin|bacill|foc|uter|loc|strat)(?:us|i)$/iu, '$1i'],
+			[/(alumn|alg|vertebr)(?:a|ae)$/iu, '$1ae'],
+			[/(seraph|cherub)(?:im)?$/iu, '$1im'],
+			[/(her|at|gr)o$/iu, '$1oes'],
+			[/(agend|addend|millenni|dat|extrem|bacteri|desiderat|strat|candelabr|errat|ov|symposi|curricul|automat|quor)(?:a|um)$/iu, '$1a'],
+			[/(apheli|hyperbat|periheli|asyndet|noumen|phenomen|criteri|organ|prolegomen|hedr|automat)(?:a|on)$/iu, '$1a'],
+			[/sis$/iu, 'ses'],
+			[/(?:(kni|wi|li)fe|(ar|l|ea|eo|oa|hoo)f)$/iu, '$1$2ves'],
+			[/([^aeiouy]|qu)y$/iu, '$1ies'],
+			[/([^ch][ieo][ln])ey$/iu, '$1ies'],
+			[/(x|ch|ss|sh|zz)$/iu, '$1es'],
+			[/(matr|cod|mur|sil|vert|ind|append)(?:ix|ex)$/iu, '$1ices'],
+			[/\b((?:tit)?m|l)(?:ice|ouse)$/iu, '$1ice'],
+			[/(pe)(?:rson|ople)$/iu, '$1ople'],
+			[/(child)(?:ren)?$/iu, '$1ren'],
+			[/eaux$/iu, '$0'],
+			[/m[ae]n$/iu, 'men'],
+			['thou', 'you']
+		].forEach(function (rule) {
+			return pluralize_in.addPluralRule(rule[0], rule[1]);
+		});
+
+		/**
+		 * Singularization rules.
+		 */
+		[
+			/* [/s$/iu, ''], */
+			[/(ss)$/iu, '$1'],
+			[/(wi|kni|(?:after|half|high|low|mid|non|night|[^\w]|^)li)ves$/iu, '$1fe'],
+			[/(ar|(?:wo|[ae])l|[eo][ao])ves$/iu, '$1f'],
+			[/ies$/iu, 'y'],
+			[/\b([pl]|zomb|(?:neck|cross)?t|coll|faer|food|gen|goon|group|lass|talk|goal|cut)ies$/iu, '$1ie'],
+			[/\b(mon|smil)ies$/iu, '$1ey'],
+			[/\b((?:tit)?m|l)ice$/iu, '$1ouse'],
+			[/(seraph|cherub)im$/iu, '$1'],
+			[/(x|ch|ss|sh|zz|tto|go|cho|alias|[^aou]us|t[lm]as|gas|(?:her|at|gr)o|[aeiou]ris)(?:es)?$/iu, '$1'],
+			[/(analy|diagno|parenthe|progno|synop|the|empha|cri|ne)(?:sis|ses)$/iu, '$1sis'],
+			[/(movie|twelve|abuse|e[mn]u)s$/iu, '$1'],
+			[/(test)(?:is|es)$/iu, '$1is'],
+			[/(alumn|syllab|vir|radi|nucle|fung|cact|stimul|termin|bacill|foc|uter|loc|strat)(?:us|i)$/iu, '$1us'],
+			[/(agend|addend|millenni|dat|extrem|bacteri|desiderat|strat|candelabr|errat|ov|symposi|curricul|quor)a$/iu, '$1um'],
+			[/(apheli|hyperbat|periheli|asyndet|noumen|phenomen|criteri|organ|prolegomen|hedr|automat)a$/iu, '$1on'],
+			[/(alumn|alg|vertebr)ae$/iu, '$1a'],
+			[/(cod|mur|sil|vert|ind)ices$/iu, '$1ex'],
+			[/(matr|append)ices$/iu, '$1ix'],
+			[/(pe)(rson|ople)$/iu, '$1rson'],
+			[/(child)ren$/iu, '$1'],
+			[/(eau)x?$/iu, '$1'],
+			[/men$/iu, 'man']
+		].forEach(function (rule) {
+			return pluralize_in.addSingularRule(rule[0], rule[1]);
+		});
+
+		/**
+		 * Uncountable rules.
+		 */
+		[
+			/* added */
+			'as',
+			/* Singular words with no plurals. */
+			'adulthood',
+			'advice',
+			'agenda',
+			'aid',
+			'aircraft',
+			'alcohol',
+			'ammo',
+			'analytics',
+			'anime',
+			'athletics',
+			'audio',
+			'bison',
+			'blood',
+			'bream',
+			'buffalo',
+			'butter',
+			'carp',
+			'cash',
+			'chassis',
+			'chess',
+			'clothing',
+			'cod',
+			'commerce',
+			'cooperation',
+			'corps',
+			'debris',
+			'diabetes',
+			'digestion',
+			'elk',
+			'energy',
+			'equipment',
+			'excretion',
+			'expertise',
+			'firmware',
+			'flounder',
+			'fun',
+			'gallows',
+			'garbage',
+			'graffiti',
+			'hardware',
+			'headquarters',
+			'health',
+			'herpes',
+			'highjinks',
+			'homework',
+			'housework',
+			'information',
+			'jeans',
+			'justice',
+			'kudos',
+			'labour',
+			'literature',
+			'machinery',
+			'mackerel',
+			'mail',
+			'media',
+			'mews',
+			'moose',
+			'music',
+			'mud',
+			'manga',
+			'news',
+			'only',
+			'personnel',
+			'pike',
+			'plankton',
+			'pliers',
+			'police',
+			'pollution',
+			'premises',
+			'rain',
+			'research',
+			'rice',
+			'salmon',
+			'scissors',
+			'series',
+			'sewage',
+			'shambles',
+			'shrimp',
+			'software',
+			'species',
+			'staff',
+			'swine',
+			'tennis',
+			'traffic',
+			'transportation',
+			'trout',
+			'tuna',
+			'wealth',
+			'welfare',
+			'whiting',
+			'wildebeest',
+			'wildlife',
+			'you',
+			/pok[eé]mon$/iu,
+			/* Regexes. */
+			/[^aeiou]ese$/iu, /* "chinese", "japanese" */
+			/deer$/iu, /* "deer", "reindeer" */
+			/fish$/iu, /* "fish", "blowfish", "angelfish" */
+			/measles$/iu,
+			/o[iu]s$/iu, /* "carnivorous" */
+			/pox$/iu, /* "chickpox", "smallpox" */
+			/sheep$/iu
+		].forEach(pluralize_in.addUncountableRule);
+
+		return pluralize_in;
+	})();
+
+
 
 	/**
 	 * 要素が可視ならtrueを返し、非表示ならfalseを返す。
@@ -78,36 +592,25 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 	};
 
 	/**
-	 * 引数のNodeに対するユニークキーを返す。
+	 * Pluralizeを使って単数形に変換する。
 	 */
-	const get_node_key = (() => {
-		let n_key = 0;
-
-		/**
-		 * @param {Node} N_arg
-		 * @returns {string}
-		 */
-		return (N_arg) => {
-			if (typeof N_arg.n_key === 'undefined') {
-				N_arg.n_key = n_key;
-				n_key += 1;
-			}
-
-			return String(N_arg.n_key);
-		};
-	})();
+	const singular = (s_text) => s_text.replaceAll(/[a-zA-Z]+/gu, (a) => pluralize.singular(a));
 
 	/**
 	 * 全角から半角へ変換する。
+	 * [Ａ-Ｚａ-ｚ０-９]から[！-～]へ変更して、より多くの全角文字を含めた。
 	 * @param {string} s_text
 	 */
-	const zenkaku2hankaku = (s_text) => s_text.replace(/[Ａ-Ｚａ-ｚ０-９]/gu, (a) => String.fromCharCode(a.charCodeAt(0) - 0xFEE0));
+	const zenkaku2hankaku = (s_text) => s_text.replace(/[！-～]/gu, (a) => String.fromCharCode(a.charCodeAt(0) - 0xFEE0));
 
 	/**
 	 * カタカナをひらがなへ変換する。
+	 * ゐ,ヰ→い
+	 * ゑ,ヱ→え
 	 * @param {string} s_text
 	 */
-	const katakana2hiragana = (s_text) => s_text.replace(/[ァ-ン]/gu, (a) => String.fromCharCode(a.charCodeAt(0) - 0x60));
+	const katakana2hiragana = (s_text) => s_text.replace(/[ァ-ン]/gu, (a) => String.fromCharCode(a.charCodeAt(0) - 0x60)).replaceAll('ゐ', 'い').
+		replaceAll('ゑ', 'え');
 
 	const kanjinumber2number_table = {
 		'一': 1,
@@ -129,20 +632,25 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 	const kanjinumber2number = (s_text) => s_text.replace(/[一二三四五六七八九]/gu, (a) => kanjinumber2number_table[a]);
 
 	/**
-	 * 引数の文字列から空白文字を除いて、全角を半角にして、カタカナをひらがなにして、漢数字を半角数値に変換する。
+	 * 引数の文字列を単数形にして、空白文字を除いて、全角を半角にして、カタカナをひらがなにして、漢数字を半角数値にして、小文字に変換する。
+	 * （注）空白を除いた後に単数形にできない。
 	 * @param {string} s_text
 	 * @returns {string}
 	 */
-	const remove_white_spaces_hankaku = (s_text) => kanjinumber2number(katakana2hiragana(zenkaku2hankaku(s_text.replaceAll(/\s+/gu, ''))));
+	const remove_white_spaces_hankaku = (s_text) => kanjinumber2number(katakana2hiragana(zenkaku2hankaku(singular(s_text).replaceAll(/\s+/gu, '')))).toLowerCase();
 
 	/**
-	 * textContentに空白文字(\s)が存在することを考慮した位置を返す。
+	 * textContentに空白文字(\s)が存在することと、単数形・複数形の文字数差を考慮した位置を返す。
 	 * @param {number} n_position
 	 * @param {string} textContent
 	 * @param {boolean} f_include_end_spaces trueなら範囲の後の空白文字を含む。
 	 * @returns {number}
 	 */
-	const get_adjusted_position = (n_position, textContent, { f_include_end_spaces = false } = {}) => {
+	const get_adjusted_position = (n_position, textContent_arg, { f_include_end_spaces = false } = {}) => {
+		const a_convert_items = textContent_arg.split(/([^a-zA-Z]+)/u).map((a) => [a.length, singular(a).length]);
+
+		const textContent = singular(textContent_arg);
+
 		let n_spaces = textContent.substring(0, n_position).match(/\s/gu)?.length ?? 0;
 
 		let n_cursor = n_position;
@@ -165,7 +673,20 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 			}
 		}
 
-		return n_cursor;
+		let n_cursor_org = n_cursor;
+		let n_sum = 0;
+		for (let index = 0; index < a_convert_items.length; index++) {
+			const a_convert_item = a_convert_items[index];
+			n_sum += a_convert_item[1];
+
+			if (n_sum > n_cursor) {
+				break;
+			}
+
+			n_cursor_org += a_convert_item[0] - a_convert_item[1];
+		}
+
+		return n_cursor_org;
 	};
 
 	/**
@@ -179,15 +700,46 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 
 		document.head.insertAdjacentHTML('beforeend', `
 <style id="highlight_selection_style">
-.highlight_selection {
+.highlight_selection:not(#a) {
 	position: relative;
 	padding: 2px 0;
 	font-style: normal;
-	line-height: 1.3;
+	line-height: inherit;
 	background: initial;
+	text-shadow: initial;
+	font-size: inherit;
 }
 
-.highlight_selection_close {
+.highlight_selection[data-n_count_highlights="1"] {
+	opacity: 0.8;
+    outline: 4px dashed pink!important;
+}
+
+/* .highlight_selection[data-n_count_highlights="1"]のopacityがStacking contextを作ってz-indexに影響するため。 */
+.highlight_selection:hover {
+	z-index: 1000000000;
+}
+
+.highlight_selection:hover:before {
+    position: absolute;
+	top: 100%;
+    left: 50%;
+    transform: translate(-50%);
+    color: white;
+    font-size: .8rem;
+    background-color: #645b5b;
+    padding: .3rem .6rem;
+    border-radius: 3px;
+    margin-top: 3px;
+	z-index: 1000000000;
+	content: attr(data-n_count_highlights);
+    letter-spacing: 0;
+    text-indent: 0;
+    line-height: initial;
+	width: max-content;
+}
+
+.highlight_selection_close:not(#a) {
 	position: absolute;
 	left: -5px;
 	top: -5px;
@@ -196,21 +748,25 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 	border: 1px solid;
 	user-select: none;
 	line-height: 0;
-	max-width: unset;
 	text-indent: 0;
+	padding: 0;
+    margin: 0;
+    width: auto;
 }
 
-.highlight_selection_close:hover {
+.highlight_selection_close:hover:not(#a) {
 	color: white;
 	background-color: hotpink;
 	cursor: pointer;
 }
 
-.highlight_selection_close_svg {
+.highlight_selection_close_svg:not(#a) {
 	width: 10px;
 	height: 10px;
 	fill: currentColor;
 	max-width: unset;
+	margin: 0;
+	padding: 0;
 }
 
 .highlight_selection_0 {
@@ -365,12 +921,12 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 
 .highlight_selection_30 {
 	color: #ed0597 !important;
-	background-color: #d0f5f7
+	background-color: #d0f5f7 !important;
 }
 
 .highlight_selection_31 {
 	color: #2884b3 !important;
-	background-color: #f7c8ca
+	background-color: #f7c8ca !important;
 }
 
 .highlight_selection_32 {
@@ -391,10 +947,8 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 
 		document.body.insertAdjacentHTML('afterbegin',
 			`<svg xmlns="http://www.w3.org/2000/svg" style="display:none;" id="highlight_selection_svg_template">
-<symbol viewBox="0 0 512 512" id="highlight_selection_close_xlink">
-<g>
- <polygon points="511.998,70.682 441.315,0 256.002,185.313 70.685,0 0.002,70.692 185.316,256.006 0.002,441.318 70.69,512 256.002,326.688 441.315,512 511.998,441.318 326.684,256.006"></polygon>
-</g>
+<symbol viewBox="0 0 32 32" id="highlight_selection_close_xlink">
+<path d="m32 4-4-4-12 12L4 0 0 4l12 12L0 28l4 4 12-12 12 12 4-4-12-12z"/>
 </symbol>
 </svg>`);
 	};
@@ -515,6 +1069,18 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 				if (['SCRIPT', 'STYLE'].includes(e_arg.nodeName.toLocaleUpperCase())) {
 					return;
 				}
+
+				/**
+				 * iframeの中の要素にもアクセスできる場合、アクセスする。
+				 */
+				const e_frame_childNodes = e_arg.contentDocument?.body?.childNodes;
+				if (e_frame_childNodes) {
+					for (let index = 0; index < e_frame_childNodes.length; index++) {
+						const e_frame_childNode = e_frame_childNodes[index];
+						body_dfs(e_frame_childNode, o_texts);
+					}
+				}
+
 				const e_childNodes = e_arg.childNodes;
 				for (let index = 0; index < e_childNodes.length; index++) {
 					const e_childNode = e_childNodes[index];
@@ -647,10 +1213,10 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 	 * @param {object[]} o_custom_ranges
 	 * @param {object[]} o_texts
 	 * @param {number} n_length s_selectionの長さ。
-	 * @returns {object}
+	 * @returns {Map}
 	 */
 	const get_custom_ranges_by_node = (o_custom_ranges, o_texts, n_length) => {
-		const o_results = {};
+		const M_results = new Map();
 
 		for (let index = 0; index < o_custom_ranges.length; index++) {
 			const custom_range = o_custom_ranges[index];
@@ -660,26 +1226,23 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 			for (let custom_range_index = custom_range_start_index; custom_range_index <= custom_range_end_index; custom_range_index++) {
 				const o_text = o_texts[custom_range_index];
 				const node = o_text.node;
-				const s_key = get_node_key(node);
-				let o_result;
+				let M_result;
 
-				if (Object.prototype.hasOwnProperty.call(o_results, s_key)) {
-					o_result = o_results[s_key];
+				if (M_results.has(node)) {
+					M_result = M_results.get(node);
 
-					console.assert(node === o_result.node);
 				} else {
-					o_result = {
+					M_result = {
 						node,
-						s_key,
 						"custom_ranges": []
 					};
 
-					o_results[s_key] = o_result;
+					M_results.set(node, M_result);
 				}
 
 				switch (custom_range_index) {
 					case custom_range_start_index:
-						o_result.custom_ranges.push({
+						M_result.custom_ranges.push({
 							"start": custom_range.start.pos,
 							"end": Math.min(o_text.s_text.length, custom_range.start.pos + n_length)
 						});
@@ -687,7 +1250,7 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 						break;
 
 					case custom_range_end_index:
-						o_result.custom_ranges.push({
+						M_result.custom_ranges.push({
 							"start": 0,
 							"end": custom_range.end.pos
 						});
@@ -698,7 +1261,7 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 						/**
 						 * custom_range_start_indexとcustom_range_end_indexの間のとき。
 						 */
-						o_result.custom_ranges.push({
+						M_result.custom_ranges.push({
 							"start": 0,
 							"end": o_text.s_text.length
 						});
@@ -708,7 +1271,7 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 			}
 		}
 
-		return o_results;
+		return M_results;
 	};
 
 	/**
@@ -716,14 +1279,16 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 	 * @param {string} text
 	 * @param {number} n_highlight_selection_serial_color
 	 * @param {number} n_max_highlight_selection_color
+	 * @param {number} n_count_highlights
 	 * @returns {element}
 	 */
-	const get_marked_node = (text, n_highlight_selection_serial_color, n_max_highlight_selection_color) => {
+	const get_marked_node = (text, n_highlight_selection_serial_color, n_max_highlight_selection_color, n_count_highlights) => {
 		const n_highlight_selection_color = n_highlight_selection_serial_color % n_max_highlight_selection_color;
 
 		const e_mark = document.createElement("mark");
-		e_mark.classList.add(`highlight_selection`, `highlight_selection_${n_highlight_selection_color}`, `highlight_selection_serial_${n_highlight_selection_serial_color}`);
+		e_mark.classList.add('highlight_selection', `highlight_selection_${n_highlight_selection_color}`, `highlight_selection_serial_${n_highlight_selection_serial_color}`);
 		e_mark.textContent = text;
+		e_mark.dataset.n_count_highlights = n_count_highlights;
 
 		return e_mark;
 	};
@@ -733,9 +1298,10 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 	 * @param {object} o_custom_range_value
 	 * @param {number} n_highlight_selection_serial_color
 	 * @param {number} n_max_highlight_selection_color
+	 * @param {number} n_count_highlights
 	 * @returns {null|(element|string)[]}
 	 */
-	const get_marked_nodes = (o_custom_range_value, n_highlight_selection_serial_color, n_max_highlight_selection_color) => {
+	const get_marked_nodes = (o_custom_range_value, n_highlight_selection_serial_color, n_max_highlight_selection_color, n_count_highlights) => {
 		const a_results = [];
 
 		const node = o_custom_range_value.node;
@@ -760,7 +1326,7 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 			const pos_end = get_adjusted_position(sorted_custom_range.end, textContent);
 			s_focus = textContent.substring(get_adjusted_position(sorted_custom_range.start, textContent, { "f_include_end_spaces": true }), pos_end);
 
-			a_results.push(get_marked_node(s_focus, n_highlight_selection_serial_color, n_max_highlight_selection_color));
+			a_results.push(get_marked_node(s_focus, n_highlight_selection_serial_color, n_max_highlight_selection_color, n_count_highlights));
 
 			n_cursor = pos_end;
 		}
@@ -775,35 +1341,15 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 	};
 
 	/**
-	 * 開始前処理
-	 */
-	const initialize = () => {
-		recover_console_log();
-
-		add_style_sheet();
-		add_svg_template();
-	};
-
-	/**
-	 * 終了前処理
-	 * @param {number} n_highlight_selection_serial_color
-	 */
-	const finalize = (n_highlight_selection_serial_color) => {
-		document.documentElement.dataset.n_highlight_selection_serial_color = n_highlight_selection_serial_color;
-
-		getSelection().empty();
-	};
-
-	/**
 	 * ハイライト色の連続番号を返す。
 	 * 最大の色番号を超えたとき色番号を0に戻さないのは、最大の色番号を超えたときに作られた色番号のハイライトを削除したとき、超えた色番号のハイライトのみを削除し、0の色番号のハイライトを削除しないため。
 	 * 「highlight_selection_番号」と「highlight_selection_serial_連続番号」の2つのクラスをハイライト対象の要素に付与する。
 	 * @returns {number}
 	 */
 	const get_highlight_selection_serial_color = () => {
-		const n_highlight_selection_serial_color = document.documentElement.dataset.n_highlight_selection_serial_color;
+		const n_highlight_selection_serial_color = document.documentElement.dataset.n_highlight_selection_serial_color_current;
 
-		if (n_highlight_selection_serial_color) {
+		if (typeof n_highlight_selection_serial_color !== 'undefined') {
 			return Number(n_highlight_selection_serial_color) + 1;
 		}
 		return 0;
@@ -883,6 +1429,11 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 			}
 
 		}
+
+		if (document.documentElement.dataset.n_highlight_selection_serial_color_current === s_highlight_selection) {
+			const n_current = Number(s_highlight_selection);
+			document.documentElement.dataset.n_highlight_selection_serial_color_current = n_current - 1;
+		}
 	};
 
 	/**
@@ -940,12 +1491,26 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 
 					const e_highlight_selection = e_close.closest('.highlight_selection');
 
+					if (window.M_highlight_selection_observer_controller) {
+						/**
+						 * MutationObserverに対応。
+						 */
+						window.M_highlight_selection_observer_controller.disconnect();
+					}
+
 					/**
 					 * e_closeを削除することでclickイベントが発生しない。
 					 */
 					e_close.remove();
 
 					remove_highlight_selections(e_highlight_selection);
+
+					if (window.M_highlight_selection_observer_controller) {
+						/**
+						 * MutationObserverに対応。
+						 */
+						window.M_highlight_selection_observer_controller.reconnect();
+					}
 				};
 
 				e_close.addEventListener('mousedown', c_mousedown, {
@@ -980,9 +1545,9 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 
 		/**
 		 * 初回だけ起動させ、常駐イベントリスナーになる。
-		 * n_highlight_selection_serial_colorの値は終了前処理（finalize）で設定する。
+		 * n_highlight_selection_serial_color_currentの値は終了前処理（finalize）で設定する。
 		 */
-		if (!document.documentElement.dataset.n_highlight_selection_serial_color) {
+		if (!document.documentElement.dataset.n_highlight_selection_serial_color_current) {
 			document.addEventListener('mouseover', c_mouseover, {
 				"capture": true
 			});
@@ -990,23 +1555,29 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 	};
 
 	/**
-	 * メイン関数
+	 * autopagerizeで更新する場合。
+	 * ハイライト数を更新する。
+	 * @param {HTMLElement} e_highlight
+	 * @param {number} n_count_highlights
 	 */
-	const main = () => {
-		initialize();
+	const update_highlight = (e_highlight, n_count_highlights) => {
+		const n_highlight = Number(e_highlight.dataset.n_count_highlights);
 
-		if (g_debug) {
-			console.log('highlight_selection_bookmark');
-		}
-
-		const s_selection = get_selection_text();
-
-		if (g_debug) {
-			console.log(`s_selection = "${s_selection}"`);
-		}
-
-		if (!s_selection) {
+		if (n_highlight === n_count_highlights) {
 			return;
+		}
+
+		e_highlight.dataset.n_count_highlights = n_count_highlights;
+	};
+
+	/**
+	 * テキストに対してハイライトを実行する。
+	 * @param {string} s_selection
+	 * @param {number} n_highlight_selection_serial_color
+	 */
+	const highlight_text = (s_selection, n_highlight_selection_serial_color) => {
+		if (g_debug) {
+			console.log('highlight_text start');
 		}
 
 		const o_texts = [];
@@ -1021,7 +1592,7 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 
 		const s_whole_text = o_texts.map((a) => a.s_text).join('');
 
-		if (g_debug > 2) {
+		if (g_debug > 3) {
 			console.log('s_whole_text =', s_whole_text);
 		}
 
@@ -1037,39 +1608,281 @@ javascript: (() => {/* eslint-disable-line no-unused-labels */
 			console.log('custom_ranges = ', o_custom_ranges);
 		}
 
-		const o_custom_ranges_by_node = get_custom_ranges_by_node(o_custom_ranges, o_texts, s_selection.length);
+		const M_custom_ranges_by_node = get_custom_ranges_by_node(o_custom_ranges, o_texts, s_selection.length);
+
+		const o_custom_range_values = [...M_custom_ranges_by_node.values()];
 
 		if (g_debug > 1) {
-			console.log('custom_ranges_by_node = ', o_custom_ranges_by_node);
+			console.log('o_custom_range_values = ', o_custom_range_values);
 		}
 
-		const n_highlight_selection_serial_color = get_highlight_selection_serial_color();
 		const n_max_highlight_selection_color = get_max_highlight_selection_color();
 
-		const o_custom_range_values = Object.values(o_custom_ranges_by_node);
+		const n_count_highlights = o_custom_range_values.reduce((ac, cv) => cv.node.parentElement.closest('.highlight_selection') && remove_white_spaces_hankaku(cv.node.textContent) !== s_selection ? ac : ac + cv.custom_ranges.length, 0);
+
 		for (let index = 0; index < o_custom_range_values.length; index++) {
 			const o_custom_range_value = o_custom_range_values[index];
 
-			const N_marked_items = get_marked_nodes(o_custom_range_value, n_highlight_selection_serial_color, n_max_highlight_selection_color);
+			const e_highlight_selection = o_custom_range_value.node.parentElement.closest('.highlight_selection');
+
+			if (e_highlight_selection) {
+				if (remove_white_spaces_hankaku(o_custom_range_value.node.textContent) === s_selection) {
+					/**
+					 * autopagerizeの場合はハイライト数を更新する。
+					 */
+					update_highlight(e_highlight_selection, n_count_highlights);
+				}
+
+				/**
+				 * 手動ハイライトで一部含む語句を指定した場合はスキップする。
+				 */
+
+				continue;
+			}
+
+			const N_marked_items = get_marked_nodes(o_custom_range_value, n_highlight_selection_serial_color, n_max_highlight_selection_color, n_count_highlights);
 			if (N_marked_items) {
 				replace_node_with(o_custom_range_value.node, N_marked_items);
 			}
 		}
+	};
+
+	/**
+	 * n_intervalの間、mutationsが発生しなかったらc_mutations_endを実行する。
+	 * @param {function} c_mutations_end
+	 * @param {number} n_interval
+	 * @param {element} e_base
+	 * @returns
+	 */
+	const add_callback_mutations_end = (c_mutations_end, n_interval = 2000, e_base = document) => {
+		let n_mutation_timeout = null;
+
+		const config = {
+			"attributes": false,
+			"characterData": false,
+			"childList": true,
+			"subtree": true
+		};
+
+		/**
+		 * MutationObserverのコールバック。
+		 * @param {MutationRecord[]} mutations
+		 * @returns
+		 */ /* eslint-disable-next-line no-unused-vars */
+		const mutation_callback = (mutations) => {
+			if (mutations.every((a) => a.addedNodes.length === 0)) {
+				/**
+				 * シンプル化のためaddedNodesが1つもなければスキップ。
+				 */
+				return;
+			}
+
+			if (g_debug > 2) {
+				console.log('mutation_callback', mutations);
+			}
+
+			if (mutations.some((a) => a.addedNodes[0]?.className?.toLowerCase().includes('highlight_selection'))) {
+				/**
+				 * ハイライトをマウスオーバーした場合などでスキップ。
+				 */
+				return;
+			}
+
+			if (mutations[0]?.addedNodes[0]?.style?.position === 'fixed') {
+				/**
+				 * smartUp Gesturesの右クリックで追加される要素を含めてシンプルに対応。
+				 */
+				return;
+			}
+
+			clearTimeout(n_mutation_timeout);
+
+			if (g_count_mutation_start < g_max_count_mutation_start) {
+
+				n_mutation_timeout = setTimeout(() => {
+
+					/* eslint-disable-next-line callback-return */
+					c_mutations_end();
+
+					g_count_mutation_start += 1;
+
+				}, n_interval);
+			}
+		};
+
+		const M_observer = new MutationObserver(mutation_callback);
+		M_observer.observe(e_base, config);
+
+		/**
+		 * 再接続(reconnect)するときに引数が必要なのでオブジェクトM_observer_controllerを作成。
+		 */
+		const M_observer_controller = {
+			"disconnect": () => {
+				M_observer.disconnect();
+			},
+			"reconnect": () => {
+				M_observer.observe(e_base, config);
+			}
+		};
+
+		return M_observer_controller;
+	};
+
+	/**
+	 * 追加されたページに対して再ハイライトする。
+	 * 同じ関数内で対応すると複雑になりそうだったのでmain関数をコピペして一部を書き換えた。
+	 * 主な変更点はo_custom_ranges_by_nodeの中でハイライト済のものをスキップさせた。
+	 * @param {number} n_highlight_selection_serial_color
+	 */
+	const re_highlight = (n_highlight_selection_serial_color) => {
+		const s_class = `.highlight_selection_serial_${n_highlight_selection_serial_color}`;
+		const e_highlighted = document.querySelector(s_class);
+		if (!e_highlighted) {
+			return;
+		}
+
+		const s_selection = remove_white_spaces_hankaku(e_highlighted.textContent);
+
+		highlight_text(s_selection, n_highlight_selection_serial_color);
+	};
+
+	/**
+	 * mutationsが一定時間、発生しなかったときに再ハイライトを実行する関数。
+	 */
+	const start_re_highlight = () => {
+		if (g_debug) {
+			console.log('re_highlight start');
+		}
+
+		if (window.M_highlight_selection_observer_controller) {
+			/**
+			 * MutationObserverに対応。
+			 */
+			window.M_highlight_selection_observer_controller.disconnect();
+		}
+
+		if (typeof document.documentElement.dataset.n_highlight_selection_serial_color_current === 'undefined') {
+			return;
+		}
+
+		const n_highlight_selection_serial_color_current = Number(document.documentElement.dataset.n_highlight_selection_serial_color_current);
+
+		for (let index = 0; index <= n_highlight_selection_serial_color_current; index++) {
+			re_highlight(index);
+		}
+
+		if (window.M_highlight_selection_observer_controller) {
+			/**
+			 * MutationObserverに対応。
+			 */
+			window.M_highlight_selection_observer_controller.reconnect();
+		}
+
+		if (g_debug) {
+			console.log('re_highlight done');
+		}
+	};
+
+	/**
+	 * 開始前処理
+	 */
+	const initialize = () => {
+		g_count_mutation_start = 0;
+
+		if (window.M_highlight_selection_observer_controller) {
+			/**
+			 * MutationObserverに対応。
+			 */
+			window.M_highlight_selection_observer_controller.disconnect();
+		}
+
+		recover_console_log();
+
+		add_style_sheet();
+		add_svg_template();
+	};
+
+	/**
+	 * 終了前処理
+	 * @param {number} n_highlight_selection_serial_color
+	 */
+	const finalize = (n_highlight_selection_serial_color) => {
+		document.documentElement.dataset.n_highlight_selection_serial_color_current = n_highlight_selection_serial_color;
+
+		getSelection().empty();
+
+		if (window.M_highlight_selection_observer_controller) {
+			/**
+			 * MutationObserverに対応。
+			 */
+			window.M_highlight_selection_observer_controller.reconnect();
+		}
+
+		if (!window.M_highlight_selection_observer_controller) {
+			/* 一度だけ実行 */
+			window.M_highlight_selection_observer_controller = add_callback_mutations_end(start_re_highlight);
+		}
+	};
+
+	/**
+	 * メイン関数
+	 */
+	const main = () => {
+		initialize();
+
+		if (g_debug) {
+			console.log('highlight_selection start');
+		}
+
+		const s_selection = get_selection_text();
+
+		if (g_debug) {
+			console.log(`s_selection = "${s_selection}"`);
+		}
+
+		if (!s_selection) {
+			return;
+		}
+
+		const n_highlight_selection_serial_color = get_highlight_selection_serial_color();
+		highlight_text(s_selection, n_highlight_selection_serial_color);
 
 		add_close_button_event();
 
 		finalize(n_highlight_selection_serial_color);
-
-		if (g_debug) {
-			/**
-			 * 元のテキストノードが全部置換されて削除されたことを確認する。
-			 * これにより元のテキストノードに保存したget_node_keyのユニークキーが全部消え、ユニークキーの前回の状態を気にしなくていいことが分かる。
-			 */
-			o_custom_range_values.forEach((a) => console.assert(a.node.isConnected === false));
-
-			console.log('done');
-		}
 	};
 
-	main();
+	if (typeof chrome === "undefined" || typeof chrome.runtime === 'undefined') {
+		/**
+		 * ブックマークレットから起動したとき。Firefoxのとき。
+		 */
+		main();
+
+		if (g_debug) {
+			console.log('done');
+		}
+	} else {
+		/**
+		 * Chrome拡張機能のコンテキストメニューから起動したとき。
+		 */
+		chrome.runtime.onMessage.addListener(
+			(message, sender, sendResponse) => {
+				if (message !== g_message) {
+					if (g_debug) {
+						console.log('onMessage unexpected');
+					}
+
+					return;
+				}
+
+				main();
+
+				sendResponse('done');
+
+				if (g_debug) {
+					console.log('onMessage done');
+				}
+			}
+		);
+	}
 })();
