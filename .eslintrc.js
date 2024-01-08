@@ -106,7 +106,7 @@ module.exports = {
         "max-lines": "off",
         "max-lines-per-function": "off",
         "max-nested-callbacks": "error",
-        "max-params": ["error", 4],
+        "max-params": ["error", 5],
         "max-statements": "off",
         "max-statements-per-line": "off",
         "multiline-comment-style": "off",
@@ -240,7 +240,12 @@ module.exports = {
         "padding-line-between-statements": "error",
         "prefer-arrow-callback": "off",
         "prefer-const": "error",
-        "prefer-destructuring": "off",
+        "prefer-destructuring": [
+            "error", {
+                "object": true,
+                "array": false
+            }
+        ],
         "prefer-numeric-literals": "error",
         "prefer-object-spread": "error",
         "prefer-promise-reject-errors": "error",

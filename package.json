@@ -1,0 +1,24 @@
+{
+  "version": "1.4.0",
+  "name": "highlightselection",
+  "description": "HTMLタグを超えて、選択範囲をキーワードとしてハイライトするブックマークレット及び拡張機能です。",
+  "private": true,
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/querykuma/HighlightSelection.git"
+  },
+  "keywords": [],
+  "author": "Query Kuma",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/querykuma/HighlightSelection/issues"
+  },
+  "homepage": "https://github.com/querykuma/HighlightSelection#readme",
+  "devDependencies": {
+    "webpack": "^5.89.0",
+    "webpack-cli": "^4.10.0"
+  }
+}
